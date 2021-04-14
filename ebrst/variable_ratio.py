@@ -1,27 +1,31 @@
+import cv2
 from amas.agent import Agent, NotWorkingError
 from comprex.agent import (ABEND, NEND, OBSERVER, READER, RECORDER, START,
-                           STIMULATOR, Recorder, Stimulator, _self_terminate)
+                           Recorder, _self_terminate)
 from comprex.audio import Speaker, Tone
 from comprex.scheduler import geom_responses
 from comprex.util import timestamp
 from pino.config import Experimental
-from pino.ino import Arduino
+from pino.ino import HIGH, LOW, Arduino, PinState
+
+FILMTAKER = "FILMTAKER"
+STIMULATOR = "STIMULATOR"
 
 
-async def flush_message(agent: Stimulator):
+async def flush_message(agent: Agent):
     while await agent.poll(0.001):
         await agent.recv()
     return None
 
 
-async def stimulate(agent: Stimulator, expvars: Experimental) -> None:
-    us = expvars.get("us", 12)
+async def stimulate(agent: Agent, ino: Arduino, expvars: Experimental) -> None:
+    us_pin = expvars.get("us", 12)
     us_duration = expvars.get("us-duration", 0.05)
     vr_value = expvars.get("required-response", 10)
     trial = expvars.get("trial", 120)
     required_responses = geom_responses(vr_value, trial)
-    us_on = us
-    us_off = -us
+    us_on = us_pin
+    us_off = -us_pin
     signal_reward = expvars.get("reward-signal")
     tone = Tone(6000, 0.1)
     speaker = Speaker(expvars.get("speaker", 0))
@@ -31,15 +35,23 @@ async def stimulate(agent: Stimulator, expvars: Experimental) -> None:
         while agent.working():
             for i in range(trial):
                 await flush_message(agent)
+
                 required_response = required_responses[i]
                 print(f"trial: {i} || vr value = {required_response}")
                 for _ in range(int(required_response)):
                     await agent.recv()
-                agent.send_to(RECORDER, timestamp(us_on))
+
                 if signal_reward:
                     speaker.play(tone, blocking=False)
-                await agent.high_for(us, us_duration)
+
+                ino.digital_write(us_pin, HIGH)
+                agent.send_to(RECORDER, timestamp(us_on))
+                agent.send_to(FILMTAKER, HIGH)
+                await agent.sleep(us_duration)
+                ino.digital_write(us_pin, LOW)
                 agent.send_to(RECORDER, timestamp(us_off))
+                agent.send_to(FILMTAKER, LOW)
+
             agent.send_to(OBSERVER, NEND)
             agent.finish()
             break
@@ -70,6 +82,61 @@ async def read(agent: Reader, expvars: Experimental) -> None:
     return None
 
 
+class FilmTaker(Agent):
+    def __init__(self, addr: str):
+        super().__init__(addr)
+        self._led = LOW
+
+    @property
+    def led(self) -> PinState:
+        return self._led
+
+
+async def film(agent: FilmTaker, camid: int, filename: str):
+    cap = cv2.VideoCapture(camid)
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+    height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    video = cv2.VideoWriter(filename, fourcc, fps, (width, height))
+
+    try:
+        while agent.working():
+            await agent.sleep(0.025)
+
+            ret, frame = cap.read()
+            if not ret:
+                continue
+
+            if agent.led == HIGH:
+                cv2.circle(frame, (10, 10), 10, (0, 0, 255), thickness=-1)
+
+            cv2.imshow(f"Camera: {camid}", frame)
+            video.write(frame)
+            if cv2.waitKey(1) % 0xFF == ord("q"):
+                break
+
+        agent.send_to(OBSERVER, NEND)
+        agent.finish()
+    except NotWorkingError:
+        agent.send_to(OBSERVER, ABEND)
+
+    cap.release()
+    video.release()
+    cv2.destroyAllWindows()
+    return None
+
+
+async def check_pin_state(agent: FilmTaker):
+    try:
+        while agent.working():
+            _, mess = await agent.recv()
+            agent._led = mess
+    except NotWorkingError:
+        pass
+    return None
+
+
 if __name__ == '__main__':
     from os import mkdir
     from os.path import exists, join
@@ -96,22 +163,38 @@ if __name__ == '__main__':
     if not exists(data_dir):
         mkdir(data_dir)
     filename = join(data_dir, namefile(config.metadata))
+    videoname = join(data_dir, namefile(config.metadata, extension="mp4"))
 
-    stimulator = Stimulator(ino=ino) \
-        .assign_task(stimulate, expvars=config.experimental) \
+    stimulator = Agent(STIMULATOR) \
+        .assign_task(stimulate, ino=ino, expvars=config.experimental) \
         .assign_task(_self_terminate)
+
     reader = Reader(ino=ino) \
         .assign_task(read, expvars=config.experimental) \
         .assign_task(_self_terminate)
+
     recorder = Recorder(filename=filename)
+
+    filmtaker = FilmTaker(FILMTAKER) \
+        .assign_task(film, camid=0, filename=videoname) \
+        .assign_task(check_pin_state) \
+        .assign_task(_self_terminate)
+
     observer = Observer()
 
-    agents = [stimulator, reader, recorder, observer]
+    agents = [stimulator, reader, recorder, observer, filmtaker]
     register = Register(agents)
-    env = Environment(agents)
+    env_exp = Environment(agents[0:-1])
+    env_cam = Environment([agents[-1]])
 
     try:
-        env.run()
+        rec_video = config.experimental.get("video", False)
+        if rec_video:
+            env_cam.parallelize()
+            env_exp.run()
+            env_cam.join()
+        else:
+            env_exp.run()
     except KeyboardInterrupt:
         observer.send_all(ABEND)
         observer.finish()

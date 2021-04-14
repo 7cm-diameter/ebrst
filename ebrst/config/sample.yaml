@@ -12,6 +12,8 @@ Experimental:
   us:                12             # Arduino pin to present US
   reward-signal:     True           # make a beep in the moment of reward
   speaker:           0              # speaker index to use
+  cam-id:            0              # camera index
+  video:             False          # whether record a video or not
 
 Metadata:
   subject:           "enter-subject-name"
