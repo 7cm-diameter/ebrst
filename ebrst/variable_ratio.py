@@ -1,14 +1,11 @@
-import numpy as np
 from amas.agent import Agent, NotWorkingError
 from comprex.agent import (ABEND, NEND, OBSERVER, READER, RECORDER, START,
                            STIMULATOR, Recorder, Stimulator, _self_terminate)
 from comprex.audio import Speaker, Tone
 from comprex.scheduler import geom_responses
 from comprex.util import timestamp
-from nptyping import NDArray
 from pino.config import Experimental
 from pino.ino import Arduino
-from scipy.stats import geom
 
 
 async def flush_message(agent: Stimulator):
@@ -25,9 +22,9 @@ async def stimulate(agent: Stimulator, expvars: Experimental) -> None:
     required_responses = geom_responses(vr_value, trial)
     us_on = us
     us_off = -us
-    beep = expvars.get("beep", True)
-    speaker = Speaker(expvars.get("speaker", 0))
+    signal_reward = expvars.get("reward-signal")
     tone = Tone(6000, 0.1)
+    speaker = Speaker(expvars.get("speaker", 0))
 
     try:
         agent.send_to(RECORDER, timestamp(START))
@@ -39,9 +36,9 @@ async def stimulate(agent: Stimulator, expvars: Experimental) -> None:
                 for _ in range(int(required_response)):
                     await agent.recv()
                 agent.send_to(RECORDER, timestamp(us_on))
+                if signal_reward:
+                    speaker.play(tone, blocking=False)
                 await agent.high_for(us, us_duration)
-                if beep:
-                    speaker.play(tone)
                 agent.send_to(RECORDER, timestamp(us_off))
             agent.send_to(OBSERVER, NEND)
             agent.finish()

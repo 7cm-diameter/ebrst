@@ -1,6 +1,7 @@
 from amas.agent import Agent, NotWorkingError
 from comprex.agent import (ABEND, NEND, OBSERVER, READER, RECORDER, START,
                            STIMULATOR, Recorder, Stimulator, _self_terminate)
+from comprex.audio import Speaker, Tone
 from comprex.util import timestamp
 from pino.config import Experimental
 from pino.ino import Arduino
@@ -13,22 +14,28 @@ async def flush_message(agent: Stimulator):
 
 
 async def stimulate(agent: Stimulator, expvars: Experimental) -> None:
-    us = expvars.get("us", 12)
+    us_pin = expvars.get("us", 12)
     us_duration = expvars.get("us-duration", 0.05)
     required_response = expvars.get("required-response", 10)
     trial = expvars.get("trial", 120)
-    us_on = us
-    us_off = -us
+    us_on = us_pin
+    us_off = -us_pin
+    signal_reward = expvars.get("reward-signal")
+    tone = Tone(6000, 0.1)
+    speaker = Speaker(expvars.get("speaker", 0))
 
     try:
         agent.send_to(RECORDER, timestamp(START))
         while agent.working():
             for _ in range(trial):
+                # ignore responses during reward presentation
                 await flush_message(agent)
                 for _ in range(required_response):
                     await agent.recv()
                 agent.send_to(RECORDER, timestamp(us_on))
-                await agent.high_for(us, us_duration)
+                if signal_reward:
+                    speaker.play(tone, blocking=False)
+                await agent.high_for(us_pin, us_duration)
                 agent.send_to(RECORDER, timestamp(us_off))
             agent.send_to(OBSERVER, NEND)
             agent.finish()

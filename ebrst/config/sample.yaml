@@ -10,6 +10,8 @@ Experimental:
   lick:              10             # Arduino pin to detect lickings
   lever:             9              # Arduino pin to detect lever pressings
   us:                12             # Arduino pin to present US
+  reward-signal:     True           # make a beep in the moment of reward
+  speaker:           0              # speaker index to use
 
 Metadata:
   subject:           "enter-subject-name"
