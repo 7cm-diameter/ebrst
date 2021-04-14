@@ -158,6 +158,7 @@ if __name__ == '__main__':
 
     ino = Arduino(com)
     ino.apply_pinmode_settings(config.pinmode)
+    camid = config.experimental.get("cam-id", 0)
 
     data_dir = join(get_current_file_abspath(__file__), "data")
     if not exists(data_dir):
@@ -176,7 +177,7 @@ if __name__ == '__main__':
     recorder = Recorder(filename=filename)
 
     filmtaker = FilmTaker(FILMTAKER) \
-        .assign_task(film, camid=0, filename=videoname) \
+        .assign_task(film, camid=camid, filename=videoname) \
         .assign_task(check_pin_state) \
         .assign_task(_self_terminate)
 
