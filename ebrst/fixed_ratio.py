@@ -92,8 +92,8 @@ class FilmTaker(Agent):
 async def film(agent: FilmTaker, camid: int, filename: str):
     cap = cv2.VideoCapture(camid)
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-    height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS)
     video = cv2.VideoWriter(filename, fourcc, fps, (width, height))
 
