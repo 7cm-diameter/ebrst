@@ -1,201 +1,202 @@
 import cv2
-from amas.agent import Agent, NotWorkingError
-from comprex.agent import (ABEND, NEND, OBSERVER, READER, RECORDER, START,
-                           Recorder, _self_terminate)
+from amas.agent import Agent
+from comprex import agent as at
 from comprex.audio import Speaker, Tone
-from comprex.scheduler import geom_responses
+from comprex.scheduler import geom_responses, uniform_intervals
 from comprex.util import timestamp
 from pino.config import Experimental
-from pino.ino import HIGH, LOW, Arduino, PinState
+from pino.ino import HIGH, LOW, Arduino
 
 FILMTAKER = "FILMTAKER"
-STIMULATOR = "STIMULATOR"
 
 
-async def flush_message(agent: Agent):
-    while await agent.poll(0.001):
-        await agent.recv()
-    return None
-
-
-async def stimulate(agent: Agent, ino: Arduino, expvars: Experimental) -> None:
-    us_pin = expvars.get("us", 12)
-    us_duration = expvars.get("us-duration", 0.05)
-    vr_value = expvars.get("required-response", 10)
-    trial = expvars.get("trial", 120)
-    required_responses = geom_responses(vr_value, trial)
-    us_on = us_pin
-    us_off = -us_pin
-    signal_reward = expvars.get("reward-signal")
-    tone = Tone(6000, 0.1)
+async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
+    # read experimental variables from the given config file
+    reward_pin = expvars.get("reward-pin", 12)
+    reward_duration = expvars.get("reward-duration", 0.05)
+    required_response = expvars.get("required-response", 1)
+    number_of_rewards = expvars.get("number-of-rewards", 120)
+    mean_ITI = expvars.get("mean-ITI", 7.5)
+    range_ITI = expvars.get("range-ITI", 2.5)
+    tone = Tone(6000, 30)
     speaker = Speaker(expvars.get("speaker", 0))
 
+    # event ids
+    reward_on = reward_pin
+    reward_off = -reward_on
+
+    # calculate inter-trial intervals
+    ITIs = uniform_intervals(mean_ITI, range_ITI, number_of_rewards)
+    required_responses = geom_responses(required_response, number_of_rewards)
+
+    # experiment control
     try:
-        agent.send_to(RECORDER, timestamp(START))
+        agent.send_to(at.RECORDER, at.START)
         while agent.working():
-            for i in range(trial):
-                await flush_message(agent)
-
-                required_response = required_responses[i]
-                print(f"trial: {i} || vr value = {required_response}")
-                for _ in range(int(required_response)):
-                    await agent.recv()
-
-                if signal_reward:
-                    speaker.play(tone, blocking=False)
-
-                ino.digital_write(us_pin, HIGH)
-                agent.send_to(RECORDER, timestamp(us_on))
+            for req, ITI in zip(required_responses, ITIs):
+                await agent.sleep(ITI)
                 agent.send_to(FILMTAKER, HIGH)
-                await agent.sleep(us_duration)
-                ino.digital_write(us_pin, LOW)
-                agent.send_to(RECORDER, timestamp(us_off))
-                agent.send_to(FILMTAKER, LOW)
+                speaker.play(tone, False, True)
+                for _ in range(req):
+                    await agent.recv()
+                speaker.stop()
 
-            agent.send_to(OBSERVER, NEND)
+            ino.digital_write(reward_pin, HIGH)
+            agent.send_to(at.RECORDER, timestamp(reward_on))
+            await agent.sleep(reward_duration)
+            ino.digital_write(reward_pin, LOW)
+            agent.send_to(at.RECORDER, timestamp(reward_off))
+            agent.send_to(FILMTAKER, LOW)
+
+            agent.send_to(at.OBSERVER, at.NEND)
             agent.finish()
-            break
-    except NotWorkingError:
-        agent.send_to(OBSERVER, ABEND)
+    except at.NotWorkingError:
+        agent.send_to(at.OBSERVER, at.ABEND)
 
 
-class Reader(Agent):
-    def __init__(self, ino: Arduino):
-        super().__init__(READER)
-        self.ino = ino
+async def read(agent: at.Agent, ino: Arduino, expvars: Experimental):
+    # read experimental variables from the given config file
+    lever_pin = expvars.get("lever-pin", 6)
 
+    # cast to `str` to compare with inputs from Arduino
+    lever_pin = str(lever_pin)
 
-async def read(agent: Reader, expvars: Experimental) -> None:
-    lever = str(expvars.get("lever", 6))
+    # Reading inputs from Arduino
     try:
         while agent.working():
-            v = await agent.call_async(agent.ino.read_until_eol)
-            if v is None:
+            input_: bytes = await agent.call_async(ino.read_until_eol)
+            if input_ is None:
                 continue
-            s = v.rstrip().decode("utf-8")
-            agent.send_to(RECORDER, timestamp(s))
-            if s == lever:
-                agent.send_to(STIMULATOR, s)
-    except NotWorkingError:
-        agent.ino.cancel_read()
-        pass
-    return None
+            parsed_input = input_.rstrip().decode("utf-8")
+            agent.send_to(at.RECORDER, timestamp(parsed_input))
+            if parsed_input == lever_pin:
+                agent.send_to(at.STIMULATOR, parsed_input)
+
+    except at.NotWorkingError:
+        ino.cancel_read()
 
 
-class FilmTaker(Agent):
-    def __init__(self, addr: str):
-        super().__init__(addr)
-        self._led = LOW
+class FilmTaker(at.Agent):
+    def __init__(self):
+        super().__init__(FILMTAKER)
+        self._mark = LOW
 
-    @property
-    def led(self) -> PinState:
-        return self._led
+    def is_marked(self) -> bool:
+        return self._mark is HIGH
 
 
-async def film(agent: FilmTaker, camid: int, filename: str):
+async def film(agent: FilmTaker, filename: str, expvars: Experimental):
+    # read experimental variables from the given config file
+    camid = expvars.get("camera-index", 0)
+    video_recording = expvars.get("video-recording", True)
+
+    # initialize and configure `VideoCapture` and `VideoWriter`
     cap = cv2.VideoCapture(camid)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
+    cap.set(cv2.CAP_PROP_FPS, 30)
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS)
-    video = cv2.VideoWriter(filename, fourcc, fps, (width, height))
+    if video_recording:
+        video = cv2.VideoWriter(filename, fourcc, fps, (width, height))
+    else:
+        video = None
 
+    # show and record frames from the camera
     try:
         while agent.working():
-            await agent.sleep(0.025)
-
+            await agent.sleep(0.01)
             ret, frame = cap.read()
             if not ret:
                 continue
 
-            if agent.led == HIGH:
+            if agent.is_marked():
                 cv2.circle(frame, (10, 10), 10, (0, 0, 255), thickness=-1)
 
             cv2.imshow(f"Camera: {camid}", frame)
-            video.write(frame)
+            if video is not None:
+                video.write(frame)
             if cv2.waitKey(1) % 0xFF == ord("q"):
                 break
-
-        agent.send_to(OBSERVER, NEND)
+        agent.send_to(at.OBSERVER, at.NEND)
         agent.finish()
-    except NotWorkingError:
-        agent.send_to(OBSERVER, ABEND)
+    except at.NotWorkingError:
+        agent.send_to(at.OBSERVER, at.ABEND)
 
     cap.release()
-    video.release()
+    if video is not None:
+        video.release()
     cv2.destroyAllWindows()
-    return None
 
 
-async def check_pin_state(agent: FilmTaker):
+async def check_markable(agent: FilmTaker):
     try:
         while agent.working():
             _, mess = await agent.recv()
-            agent._led = mess
-    except NotWorkingError:
+            agent._mark = mess
+    except at.NotWorkingError:
         pass
     return None
 
 
 if __name__ == '__main__':
-    from os import mkdir
-    from os.path import exists, join
+    from pathlib import Path
 
     from amas.connection import Register
     from amas.env import Environment
-    from comprex.agent import Observer
     from comprex.util import get_current_file_abspath, namefile
     from pino.ino import Comport
     from pino.ui.clap import PinoCli
 
+    # read the config file passed from command line
     config = PinoCli().get_config()
 
+    # configure comport and Arduino
     com = Comport() \
         .apply_settings(config.comport) \
         .set_timeout(1.0) \
         .deploy() \
         .connect()
-
     ino = Arduino(com)
     ino.apply_pinmode_settings(config.pinmode)
-    camid = config.experimental.get("cam-id", 0)
 
-    data_dir = join(get_current_file_abspath(__file__), "data")
-    if not exists(data_dir):
-        mkdir(data_dir)
-    filename = join(data_dir, namefile(config.metadata))
-    videoname = join(data_dir, namefile(config.metadata, extension="mp4"))
+    # Set the directory where the data wioll be saved and filename
+    data_dir = Path(get_current_file_abspath(__file__)).joinpath("data")
+    if not data_dir.exists():
+        data_dir.mkdir()
+    eventfile = data_dir.joinpath(namefile(config.metadata))
+    videofile = data_dir.joinpath(namefile(config.metadata, extension="MP4"))
 
-    stimulator = Agent(STIMULATOR) \
+    # Assign tasks to agents
+    stimulator = Agent(at.STIMULATOR) \
         .assign_task(stimulate, ino=ino, expvars=config.experimental) \
-        .assign_task(_self_terminate)
+        .assign_task(at._self_terminate)
 
-    reader = Reader(ino=ino) \
-        .assign_task(read, expvars=config.experimental) \
-        .assign_task(_self_terminate)
+    reader = Agent(at.READER) \
+        .assign_task(read, ino=ino, expvars=config.experimental) \
+        .assign_task(at._self_terminate)
 
-    recorder = Recorder(filename=filename)
+    filmtaker = FilmTaker() \
+        .assign_task(film,
+                     filename=str(videofile),
+                     expvars=config.experimental) \
+        .assign_task(check_markable) \
+        .assign_task(at._self_terminate)
 
-    filmtaker = FilmTaker(FILMTAKER) \
-        .assign_task(film, camid=camid, filename=videoname) \
-        .assign_task(check_pin_state) \
-        .assign_task(_self_terminate)
+    recorder = at.Recorder(str(eventfile))
 
-    observer = Observer()
+    observer = at.Observer()
 
-    agents = [stimulator, reader, recorder, observer, filmtaker]
-    register = Register(agents)
-    env_exp = Environment(agents[0:-1])
-    env_cam = Environment([agents[-1]])
+    register = Register([stimulator, reader, recorder, observer, filmtaker])
+    env0 = Environment([stimulator, observer])
+    env1 = Environment([filmtaker, reader, recorder])
 
     try:
-        rec_video = config.experimental.get("video", False)
-        if rec_video:
-            env_cam.parallelize()
-            env_exp.run()
-            env_cam.join()
-        else:
-            env_exp.run()
+        env1.parallelize()
+        env0.run()
+        env1.join()
     except KeyboardInterrupt:
-        observer.send_all(ABEND)
+        observer.send_all(at.ABEND)
         observer.finish()
