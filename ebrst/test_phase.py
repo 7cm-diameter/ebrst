@@ -15,7 +15,7 @@ FILMTAKER = "FILMTAKER"
 async def flush_message_for(agent: Agent, duration: float):
     while duration >= 0.:
         s, _ = timestamp(None)
-        await agent.recv(duration)
+        await agent.try_recv(duration)
         e, _ = timestamp(None)
         duration -= e - s
 
