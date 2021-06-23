@@ -25,7 +25,7 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
     reward_on = reward_pin
     reward_off = -reward_on
 
-    # calculate inter-trial intervals
+    # calculate based on the values read from the config files
     ITIs = unif_rng(mean_ITI, range_ITI, number_of_rewards)
     required_responses = geom_rng(required_response, number_of_rewards)
 
