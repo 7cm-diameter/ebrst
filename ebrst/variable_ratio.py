@@ -2,7 +2,7 @@ import cv2
 from amas.agent import Agent
 from comprex import agent as at
 from comprex.audio import Speaker, Tone
-from comprex.scheduler import geom_responses, uniform_intervals
+from comprex.scheduler import geom_rng, unif_rng
 from comprex.util import timestamp
 from pino.config import Experimental
 from pino.ino import HIGH, LOW, Arduino
@@ -26,8 +26,8 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
     reward_off = -reward_on
 
     # calculate inter-trial intervals
-    ITIs = uniform_intervals(mean_ITI, range_ITI, number_of_rewards)
-    required_responses = geom_responses(required_response, number_of_rewards)
+    ITIs = unif_rng(mean_ITI, range_ITI, number_of_rewards)
+    required_responses = geom_rng(required_response, number_of_rewards)
 
     # experiment control
     try:
