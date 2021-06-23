@@ -27,6 +27,7 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
     number_of_rewards = expvars.get("number-of-rewards", 200)
     mean_ITI = expvars.get("mean-ITI", 7.5)
     range_ITI = expvars.get("range-ITI", 2.5)
+    # TODO: apply `blockwise_shuffle`
     where_probe = generate_probe_trial(expvars.get("number-of-probe", 6),
                                        number_of_rewards, 20)
     tone = Tone(6000, 30)
@@ -55,18 +56,20 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
                 else:
                     for _ in range(req):
                         await agent.recv()
+
                 speaker.stop()
+                ino.digital_write(reward_pin, HIGH)
+                agent.send_to(at.RECORDER, timestamp(reward_on))
+                await agent.sleep(reward_duration)
+                ino.digital_write(reward_pin, LOW)
+                agent.send_to(at.RECORDER, timestamp(reward_off))
+                agent.send_to(FILMTAKER, LOW)
 
-            ino.digital_write(reward_pin, HIGH)
-            agent.send_to(at.RECORDER, timestamp(reward_on))
-            await agent.sleep(reward_duration)
-            ino.digital_write(reward_pin, LOW)
-            agent.send_to(at.RECORDER, timestamp(reward_off))
-            agent.send_to(FILMTAKER, LOW)
-
+            agent.send_to(at.RECORDER, timestamp(at.NEND))
             agent.send_to(at.OBSERVER, at.NEND)
             agent.finish()
     except at.NotWorkingError:
+        agent.send_to(at.RECORDER, timestamp(at.ABEND))
         agent.send_to(at.OBSERVER, at.ABEND)
 
 
