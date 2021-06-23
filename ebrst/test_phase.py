@@ -12,6 +12,14 @@ from pino.ino import HIGH, LOW, Arduino
 FILMTAKER = "FILMTAKER"
 
 
+async def flush_message_for(agent: Agent, duration: float):
+    while duration >= 0.:
+        s, _ = timestamp(None)
+        await agent.recv(duration)
+        e, _ = timestamp(None)
+        duration -= e - s
+
+
 def generate_probe_trial(nprobe: int, ntrial: int, warmup: int) -> List[bool]:
     return [
         False if i % ((ntrial - warmup) // nprobe) or i <= warmup else True
@@ -47,7 +55,7 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
         agent.send_to(at.RECORDER, at.START)
         while agent.working():
             for req, ITI, probe in zip(required_responses, ITIs, where_probe):
-                await agent.sleep(ITI)
+                await flush_message_for(agent, ITI)
                 agent.send_to(FILMTAKER, HIGH)
                 speaker.play(tone, False, True)
                 if probe:

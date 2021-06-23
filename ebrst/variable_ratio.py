@@ -10,6 +10,14 @@ from pino.ino import HIGH, LOW, Arduino
 FILMTAKER = "FILMTAKER"
 
 
+async def flush_message_for(agent: Agent, duration: float):
+    while duration >= 0.:
+        s, _ = timestamp(None)
+        await agent.recv(duration)
+        e, _ = timestamp(None)
+        duration -= e - s
+
+
 async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
     # read experimental variables from the given config file
     reward_pin = expvars.get("reward-pin", 12)
@@ -34,7 +42,7 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
         agent.send_to(at.RECORDER, at.START)
         while agent.working():
             for req, ITI in zip(required_responses, ITIs):
-                await agent.sleep(ITI)
+                await flush_message_for(agent, ITI)
                 agent.send_to(FILMTAKER, HIGH)
                 speaker.play(tone, False, True)
                 for _ in range(req):
