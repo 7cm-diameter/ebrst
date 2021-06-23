@@ -1,19 +1,21 @@
 Comport:
-  port:              "/dev/ttyACM4" # `linux`: `/dev/ttyACMx` / `windows`: `COMx` (x: int)
+  port:              "/dev/ttyACM0" # `linux`: `/dev/ttyACMx` / `windows`: `COMx` (x: int)
   baudrate:          115200         # available baudrates are 300, 1200, 2400, 9600, 14400, 19200, 38400, 57600, 115200
   warmup:            2.0            # sec (should not be changed.)
 
 Experimental:
-  trial:             120            # Number of trials per session
-  us-duration:       0.05           # Duration of US-presentation (sec)
-  required-response: 10             # Number of responses required to obtain rewards
-  lick:              10             # Arduino pin to detect lickings
-  lever:             9              # Arduino pin to detect lever pressings
-  us:                12             # Arduino pin to present US
-  reward-signal:     True           # make a beep in the moment of reward
+  number-of-rewards: 200            # Number of trials per session
+  reward-duration:   0.05           # Duration of US-presentation (sec)
+  required-response: 1              # Number of responses required to obtain rewards
+  lick-pin:          7              # Arduino pin to detect lickings
+  lever-pin:         6              # Arduino pin to detect lever pressings
+  reward-pin:        12             # Arduino pin to present US
+  mean-ITI:          7.5            # Mean lenght of inter-trial interval
+  range-ITI:         2.5            # Range of inter-trial interval (`mean-ITI` +/- `range-ITI`)
+  number-of-probe:   6              # Number of probe trials in one session
   speaker:           0              # speaker index to use
-  cam-id:            0              # camera index
-  video:             False          # whether record a video or not
+  camera-index:      0              # camera index
+  video-recording:   False          # whether record a video or not
 
 Metadata:
   subject:           "enter-subject-name"
@@ -21,5 +23,5 @@ Metadata:
 
 PinMode:
   12:                "OUTPUT"
-  10:                "SSINPUT_PULLUP"
-  9:                 "SSINPUT_PULLUP"
+  7:                 "SSINPUT_PULLUP"
+  6:                 "SSINPUT_PULLUP"
