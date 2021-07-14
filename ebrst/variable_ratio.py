@@ -43,18 +43,22 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
         while agent.working():
             for req, ITI in zip(required_responses, ITIs):
                 await flush_message_for(agent, ITI)
+
                 agent.send_to(FILMTAKER, HIGH)
+                agent.send_to(at.RECORDER, tone.freq)
                 speaker.play(tone, False, True)
                 for _ in range(req):
                     await agent.recv()
 
                 speaker.stop()
+                agent.send_to(at.RECORDER, -tone.freq)
+                agent.send_to(FILMTAKER, LOW)
+
                 ino.digital_write(reward_pin, HIGH)
                 agent.send_to(at.RECORDER, timestamp(reward_on))
                 await agent.sleep(reward_duration)
                 ino.digital_write(reward_pin, LOW)
                 agent.send_to(at.RECORDER, timestamp(reward_off))
-                agent.send_to(FILMTAKER, LOW)
 
             agent.send_to(at.RECORDER, timestamp(at.NEND))
             agent.send_to(at.OBSERVER, at.NEND)
