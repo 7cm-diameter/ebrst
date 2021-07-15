@@ -57,7 +57,7 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
             for req, ITI, probe in zip(required_responses, ITIs, where_probe):
                 await flush_message_for(agent, ITI)
                 agent.send_to(FILMTAKER, HIGH)
-                agent.send_to(at.RECORDER, tone.freq)
+                agent.send_to(at.RECORDER, timestamp(tone.freq))
                 speaker.play(tone, False, True)
                 if probe:
                     for _ in range(extinction_length):
@@ -68,7 +68,7 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
 
                 speaker.stop()
                 agent.send_to(FILMTAKER, LOW)
-                agent.send_to(FILMTAKER, LOW)
+                agent.send_to(at.RECORDER, timestamp(-tone.freq))
 
                 ino.digital_write(reward_pin, HIGH)
                 agent.send_to(at.RECORDER, timestamp(reward_on))
