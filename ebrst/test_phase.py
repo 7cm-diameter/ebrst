@@ -52,7 +52,7 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
 
     # experiment control
     try:
-        agent.send_to(at.RECORDER, at.START)
+        agent.send_to(at.RECORDER, timestamp(at.START))
         while agent.working():
             for req, ITI, probe in zip(required_responses, ITIs, where_probe):
                 await flush_message_for(agent, ITI)
