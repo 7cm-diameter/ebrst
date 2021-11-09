@@ -2,7 +2,7 @@ import cv2
 from amas.agent import Agent
 from comprex import agent as at
 from comprex.audio import Speaker, Tone
-from comprex.scheduler import geom_rng, unif_rng
+from comprex.scheduler import geom_rng
 from comprex.util import timestamp
 from pino.config import Experimental
 from pino.ino import HIGH, LOW, Arduino
@@ -23,9 +23,7 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
     reward_pin = expvars.get("reward-pin", 12)
     reward_duration = expvars.get("reward-duration", 0.05)
     required_response = expvars.get("required-response", 1)
-    number_of_rewards = expvars.get("number-of-rewards", 120)
-    mean_ITI = expvars.get("mean-ITI", 7.5)
-    range_ITI = expvars.get("range-ITI", 2.5)
+    number_of_rewards = expvars.get("number-of-rewards", 200)
     tone = Tone(6000, 30)
     speaker = Speaker(expvars.get("speaker", 0))
 
@@ -34,25 +32,25 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
     reward_off = -reward_on
 
     # calculate based on the values read from the config files
-    ITIs = unif_rng(mean_ITI, range_ITI, number_of_rewards)
     required_responses = geom_rng(required_response, number_of_rewards)
 
     # experiment control
     try:
         agent.send_to(at.RECORDER, at.START)
         while agent.working():
-            for req, ITI in zip(required_responses, ITIs):
-                await flush_message_for(agent, ITI)
-
+            # make a pure tone to signal whether an experiment is in progress.
+            speaker.play(tone, False, True)
+            for req in required_responses:
+                # embed mark in a frame to signal the start of a trial
                 agent.send_to(FILMTAKER, HIGH)
+                await flush_message_for(agent, 0.1)
+                agent.send_to(FILMTAKER, LOW)
                 agent.send_to(at.RECORDER, timestamp(tone.freq))
-                speaker.play(tone, False, True)
+
                 for _ in range(req):
                     await agent.recv()
 
-                speaker.stop()
                 agent.send_to(at.RECORDER, timestamp(-tone.freq))
-                agent.send_to(FILMTAKER, LOW)
 
                 ino.digital_write(reward_pin, HIGH)
                 agent.send_to(at.RECORDER, timestamp(reward_on))
@@ -60,9 +58,11 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
                 ino.digital_write(reward_pin, LOW)
                 agent.send_to(at.RECORDER, timestamp(reward_off))
 
+            speaker.stop()
             agent.send_to(at.RECORDER, timestamp(at.NEND))
             agent.send_to(at.OBSERVER, at.NEND)
             agent.finish()
+
     except at.NotWorkingError:
         agent.send_to(at.RECORDER, timestamp(at.ABEND))
         agent.send_to(at.OBSERVER, at.ABEND)

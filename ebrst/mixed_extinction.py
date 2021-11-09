@@ -4,7 +4,7 @@ import cv2
 from amas.agent import Agent
 from comprex import agent as at
 from comprex.audio import Speaker, Tone
-from comprex.scheduler import blockwise_shuffle, geom_rng, unif_rng
+from comprex.scheduler import blockwise_shuffle, geom_rng
 from comprex.util import timestamp
 from pino.config import Experimental
 from pino.ino import HIGH, LOW, Arduino
@@ -33,11 +33,11 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
     reward_duration = expvars.get("reward-duration", 0.006)
     required_response = expvars.get("required-response", 1)
     number_of_rewards = expvars.get("number-of-rewards", 200)
-    mean_ITI = expvars.get("mean-ITI", 7.5)
-    range_ITI = expvars.get("range-ITI", 2.5)
     # TODO: apply `blockwise_shuffle`
-    where_probe = generate_probe_trial(expvars.get("number-of-probe", 6),
-                                       number_of_rewards, 20)
+    where_probe = blockwise_shuffle(
+        generate_probe_trial(expvars.get("number-of-probe", 4),
+                             number_of_rewards, 40), 40)
+
     tone = Tone(6000, 30)
     speaker = Speaker(expvars.get("speaker", 0))
 
@@ -46,28 +46,29 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
     reward_off = -reward_on
 
     # calculate based on the values read from the config files
-    ITIs = unif_rng(mean_ITI, range_ITI, number_of_rewards)
     required_responses = geom_rng(required_response, number_of_rewards)
+    # TODO: Review the length of extinction length
     extinction_length = max(required_responses) * 3 + 10
 
     # experiment control
     try:
         agent.send_to(at.RECORDER, timestamp(at.START))
         while agent.working():
-            for req, ITI, probe in zip(required_responses, ITIs, where_probe):
-                await flush_message_for(agent, ITI)
+            speaker.play(tone, False, True)
+            for req, probe in zip(required_responses, where_probe):
                 agent.send_to(FILMTAKER, HIGH)
-                agent.send_to(at.RECORDER, timestamp(tone.freq))
-                speaker.play(tone, False, True)
+                await flush_message_for(agent, 0.1)
+                agent.send_to(FILMTAKER, LOW)
+
                 if probe:
+                    agent.send_to(at.RECORDER, timestamp(-200))
                     for _ in range(extinction_length):
                         await agent.recv()
                 else:
+                    agent.send_to(at.RECORDER, timestamp(200))
                     for _ in range(req):
                         await agent.recv()
 
-                speaker.stop()
-                agent.send_to(FILMTAKER, LOW)
                 agent.send_to(at.RECORDER, timestamp(-tone.freq))
 
                 ino.digital_write(reward_pin, HIGH)
@@ -76,9 +77,11 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
                 ino.digital_write(reward_pin, LOW)
                 agent.send_to(at.RECORDER, timestamp(reward_off))
 
+            speaker.stop()
             agent.send_to(at.RECORDER, timestamp(at.NEND))
             agent.send_to(at.OBSERVER, at.NEND)
             agent.finish()
+
     except at.NotWorkingError:
         agent.send_to(at.RECORDER, timestamp(at.ABEND))
         agent.send_to(at.OBSERVER, at.ABEND)
