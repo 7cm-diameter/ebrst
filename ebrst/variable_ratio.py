@@ -36,15 +36,11 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
 
     # experiment control
     try:
-        agent.send_to(at.RECORDER, at.START)
+        agent.send_to(at.RECORDER, timestamp(at.START))
         while agent.working():
             # make a pure tone to signal whether an experiment is in progress.
             speaker.play(tone, False, True)
             for req in required_responses:
-                # embed mark in a frame to signal the start of a trial
-                agent.send_to(FILMTAKER, HIGH)
-                await flush_message_for(agent, 0.1)
-                agent.send_to(FILMTAKER, LOW)
                 agent.send_to(at.RECORDER, timestamp(tone.freq))
 
                 for _ in range(req):
@@ -57,6 +53,11 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
                 await agent.sleep(reward_duration)
                 ino.digital_write(reward_pin, LOW)
                 agent.send_to(at.RECORDER, timestamp(reward_off))
+
+                # embed mark in a frame to signal the start of a trial
+                agent.send_to(FILMTAKER, HIGH)
+                await flush_message_for(agent, 0.1)
+                agent.send_to(FILMTAKER, LOW)
 
             speaker.stop()
             agent.send_to(at.RECORDER, timestamp(at.NEND))
