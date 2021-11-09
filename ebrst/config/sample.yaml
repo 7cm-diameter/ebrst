@@ -10,9 +10,7 @@ Experimental:
   lick-pin:          7              # Arduino pin to detect lickings
   lever-pin:         6              # Arduino pin to detect lever pressings
   reward-pin:        12             # Arduino pin to present US
-  mean-ITI:          7.5            # Mean lenght of inter-trial interval
-  range-ITI:         2.5            # Range of inter-trial interval (`mean-ITI` +/- `range-ITI`)
-  number-of-probe:   6              # Number of probe trials in one session
+  number-of-probe:   4              # Number of probe trials in one session
   speaker:           0              # speaker index to use
   camera-index:      0              # camera index
   video-recording:   False          # whether record a video or not
