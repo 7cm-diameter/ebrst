@@ -34,10 +34,10 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
     required_response = expvars.get("required-response", 1)
     number_of_rewards = expvars.get("number-of-rewards", 200)
     # TODO: apply `blockwise_shuffle`
-    where_probe = blockwise_shuffle(
-        generate_probe_trial(expvars.get("number-of-probe", 4),
-                             number_of_rewards, 40), 40)
-
+    where_probe = generate_probe_trial(expvars.get("number-of-probe", 4),
+                                       number_of_rewards, 40)
+    where_probe = blockwise_shuffle(where_probe, 40)
+    probe_duration = expvars.get("extinction-length", 60.)
     tone = Tone(6000, 30)
     speaker = Speaker(expvars.get("speaker", 0))
 
@@ -47,8 +47,6 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
 
     # calculate based on the values read from the config files
     required_responses = geom_rng(required_response, number_of_rewards)
-    # TODO: Review the length of extinction length
-    extinction_length = max(required_responses) * 3 + 10
 
     # experiment control
     try:
@@ -61,9 +59,10 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
                 agent.send_to(FILMTAKER, LOW)
 
                 if probe:
-                    agent.send_to(at.RECORDER, timestamp(-200))
-                    for _ in range(extinction_length):
-                        await agent.recv()
+                    while True:
+                        mess = await agent.try_recv(probe_duration)
+                        if mess is None:
+                            break
                 else:
                     agent.send_to(at.RECORDER, timestamp(200))
                     for _ in range(req):
