@@ -177,7 +177,7 @@ if __name__ == '__main__':
     ino = Arduino(com)
     ino.apply_pinmode_settings(config.pinmode)
 
-    # Set the directory where the data wioll be saved and filename
+    # Set the directory where the data will be saved and filename
     data_dir = Path(get_current_file_abspath(__file__)).joinpath("data")
     if not data_dir.exists():
         data_dir.mkdir()
