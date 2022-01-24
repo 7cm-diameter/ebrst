@@ -33,11 +33,10 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
     reward_duration = expvars.get("reward-duration", 0.006)
     required_response = expvars.get("required-response", 1)
     number_of_rewards = expvars.get("number-of-rewards", 200)
-    # TODO: apply `blockwise_shuffle`
     where_probe = generate_probe_trial(expvars.get("number-of-probe", 4),
                                        number_of_rewards, 40)
     where_probe = blockwise_shuffle(where_probe, 40)
-    probe_duration = expvars.get("extinction-length", 60.)
+    probe_duration = expvars.get("probe-duration", 60.)
     tone = Tone(6000, 30)
     speaker = Speaker(expvars.get("speaker", 0))
 
