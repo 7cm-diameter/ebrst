@@ -58,6 +58,7 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
                 agent.send_to(FILMTAKER, LOW)
 
                 if probe:
+                    agent.send_to(at.RECORDER, timestamp(-200))
                     while True:
                         mess = await agent.try_recv(probe_duration)
                         if mess is None:
