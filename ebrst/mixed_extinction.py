@@ -50,20 +50,24 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
     # experiment control
     try:
         agent.send_to(at.RECORDER, timestamp(at.START))
+        trial = range(0, len(where_probe))
         while agent.working():
             speaker.play(tone, False, True)
-            for req, probe in zip(required_responses, where_probe):
+            for req, probe, i in zip(required_responses, where_probe, trial):
+                print(f"trial = {i}")
                 agent.send_to(FILMTAKER, HIGH)
                 await flush_message_for(agent, 0.1)
                 agent.send_to(FILMTAKER, LOW)
 
                 if probe:
+                    print("extinction start")
                     agent.send_to(at.RECORDER, timestamp(-200))
                     while True:
                         mess = await agent.try_recv(probe_duration)
                         if mess is None:
                             break
                 else:
+                    print(f"required response = {req}")
                     agent.send_to(at.RECORDER, timestamp(200))
                     for _ in range(req):
                         await agent.recv()
