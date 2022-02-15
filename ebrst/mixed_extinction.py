@@ -55,9 +55,14 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
             speaker.play(tone, False, True)
             for req, probe, i in zip(required_responses, where_probe, trial):
                 print(f"trial = {i}")
-                agent.send_to(FILMTAKER, HIGH)
-                await flush_message_for(agent, 0.1)
-                agent.send_to(FILMTAKER, LOW)
+                if probe:
+                    agent.send_to(FILMTAKER, 1)
+                    await flush_message_for(agent, 0.1)
+                    agent.send_to(FILMTAKER, 0)
+                else:
+                    agent.send_to(FILMTAKER, 2)
+                    await flush_message_for(agent, 0.1)
+                    agent.send_to(FILMTAKER, 0)
 
                 if probe:
                     print("extinction start")
@@ -115,10 +120,7 @@ async def read(agent: at.Agent, ino: Arduino, expvars: Experimental):
 class FilmTaker(at.Agent):
     def __init__(self):
         super().__init__(FILMTAKER)
-        self._mark = LOW
-
-    def is_marked(self) -> bool:
-        return self._mark is HIGH
+        self.mark = 0
 
 
 async def film(agent: FilmTaker, filename: str, expvars: Experimental):
@@ -148,7 +150,9 @@ async def film(agent: FilmTaker, filename: str, expvars: Experimental):
             if not ret:
                 continue
 
-            if agent.is_marked():
+            if agent.mark == 1:
+                cv2.circle(frame, (10, 10), 10, (0, 255, 0), thickness=-1)
+            elif agent.mark == 2:
                 cv2.circle(frame, (10, 10), 10, (0, 0, 255), thickness=-1)
 
             cv2.imshow(f"Camera: {camid}", frame)
@@ -171,7 +175,7 @@ async def check_markable(agent: FilmTaker):
     try:
         while agent.working():
             _, mess = await agent.recv()
-            agent._mark = mess
+            agent.mark = mess
     except at.NotWorkingError:
         pass
     return None
