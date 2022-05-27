@@ -6,13 +6,12 @@ library(comprexr)
 library(gt)
 options(browser = "google-chrome-stable")
 
-
-fonts_config <- theme(axis.text = element_text(color = "transparent"),
-                      axis.title = element_text(color = "transparent"),
+fonts_config <- theme(axis.text = element_text(size = 20),
+                      axis.title = element_text(size = 25),
                       legend.text = element_text(color = "transparent"),
                       legend.title = element_text(color = "transparent"),
-                      strip.text = element_text(color = "transparent"),
-                      strip.background = element_rect(color = "transparent", fill = "transparent"))
+                      strip.text = element_text(size = 20, color = "white"),
+                      strip.background = element_rect(color = "black", fill = "black"))
 
 
 # read csv and format data
@@ -182,19 +181,24 @@ tibble(selected_model) %>%
   tab_header(title = "個体・セッションごとのHQ-learningとVQ-learningのフィッティング結果")
 
 # example of analytical approximation
-analytical_approximation <- read.csv(paste0(DATA_DIR, "analytical_approximation.csv"))
+analytical_approximation <- read.csv("./data/analytical_approximation.csv")
 
 analytical_approximation$t <- seq_len(nrow(analytical_approximation))
 
-fig2 <- ggplot(analytical_approximation) +
+ggplot(analytical_approximation) +
   geom_line(aes(x = t, y = q, color = "red"),
-            alpha = 0.7, size = 1) +
-  geom_line(aes(x = t, y = epsilon, color = "green"),
-            alpha = 0.7, size = 1) +
-  geom_line(aes(x = t, y = theta, color = "blue"),
-            size = 2) +
+            alpha = 0.7, size = 2) +
+  geom_line(aes(x = t, y = epsilon, color = "blue"),
+            alpha = 0.7, size = 2) +
+  geom_line(aes(x = t, y = theta, color = "magenta"),
+            size = 2, alpha = 0.7) +
+  geom_hline(yintercept = 0.737, linetype = "dotted", size = 1) +
+  geom_vline(xintercept = 200, linetype = "dashed", size = 1) +
   thanatos_light_color_with_name() +
   theme_bw() +
+  xlab("タイムステップ") +
+  ylab("行動価値関数・好奇心・反応率") +
   theme(legend.position = "none", aspect.ratio = 1) +
   fonts_config
-ggsave("./fig2.jpg", fig2)
+
+ggsave("./burst_sim_exp.jpg", fig2)
