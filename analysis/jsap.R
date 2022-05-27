@@ -131,21 +131,23 @@ ggplot(data = aligned_on_event_est) +
   ylab("Response per second")
 
 # burst strength
-brststr <- read.csv("./data/pilot/brststr.csv")
+brststr <- read.csv("./brststr.csv")
 brststr$burst[brststr$burst == 0] <- NaN
 brststr
 
-fig1 <- ggplot(data = brststr) +
-  geom_tile(aes(x = alpha_p, y = alpha_n, fill = burst)) +
-  facet_grid(~p~w) +
-  xlab("") + ylab("") +
-  scale_fill_viridis() +
-  theme_classic() +
-  theme(aspect.ratio = 1) +
-  fonts_config
-fig1
+brststr %>%
+  filter(p != 0.75 & w != 0.75) %>%
+  ggplot() +
+    geom_tile(aes(x = alpha_p, y = alpha_n, fill = burst)) +
+    facet_grid(~p~w) +
+    xlab("") + ylab("") +
+    scale_fill_viridis() +
+    theme_classic() +
+    theme(aspect.ratio = 1) +
+    theme(axis.text.x = element_text(angle = -30)) +
+    fonts_config
 
-ggsave("./fig1.jpg", fig1)
+ggsave("./burst_sim_all.jpg")
 
 # model selection
 fitted_result <- read.csv(paste0(DATA_DIR, "fitted_result.csv"))
@@ -201,4 +203,4 @@ ggplot(analytical_approximation) +
   theme(legend.position = "none", aspect.ratio = 1) +
   fonts_config
 
-ggsave("./burst_sim_exp.jpg", fig2)
+ggsave("./burst_sim_exp.jpg")
