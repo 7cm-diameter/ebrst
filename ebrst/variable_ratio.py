@@ -1,10 +1,10 @@
 import cv2
 from amas.agent import Agent
 from comprex import agent as at
-from comprex.audio import Speaker, Tone
+from comprex.audio import Speaker, PureTone
 from comprex.scheduler import geom_rng
 from comprex.util import timestamp
-from pino.config import Experimental
+from pino.config import ExperimentalSetting
 from pino.ino import HIGH, LOW, Arduino
 
 FILMTAKER = "FILMTAKER"
@@ -18,13 +18,13 @@ async def flush_message_for(agent: Agent, duration: float):
         duration -= e - s
 
 
-async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
+async def stimulate(agent: at.Agent, ino: Arduino, expvars: ExperimentalSetting):
     # read experimental variables from the given config file
     reward_pin = expvars.get("reward-pin", 12)
     reward_duration = expvars.get("reward-duration", 0.05)
     required_response = expvars.get("required-response", 1)
     number_of_rewards = expvars.get("number-of-rewards", 200)
-    tone = Tone(6000, 30)
+    tone = PureTone(6000, 30)
     speaker = Speaker(expvars.get("speaker", 0))
 
     # event ids
@@ -69,7 +69,7 @@ async def stimulate(agent: at.Agent, ino: Arduino, expvars: Experimental):
         agent.send_to(at.OBSERVER, at.ABEND)
 
 
-async def read(agent: at.Agent, ino: Arduino, expvars: Experimental):
+async def read(agent: at.Agent, ino: Arduino, expvars: ExperimentalSetting):
     # read experimental variables from the given config file
     lever_pin = expvars.get("lever-pin", 6)
 
@@ -100,7 +100,7 @@ class FilmTaker(at.Agent):
         return self._mark is HIGH
 
 
-async def film(agent: FilmTaker, filename: str, expvars: Experimental):
+async def film(agent: FilmTaker, filename: str, expvars: ExperimentalSetting):
     # read experimental variables from the given config file
     camid = expvars.get("camera-index", 0)
     video_recording = expvars.get("video-recording", True)
