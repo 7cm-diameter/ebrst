@@ -7,4 +7,6 @@ __pycache__/
 !sample.yaml
 !test*.yaml
 /data
+/stats
+/figs
 /.vim
